@@ -38,13 +38,13 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh """
-                        ./node_modules/.bin/sonar-scanner \
-                          -Dsonar.projectKey=angular-devops \
-                          -Dsonar.sources=src \
-                          -Dsonar.host.url=$SONAR_HOST_URL \
-                          -Dsonar.login=$SONAR_AUTH_TOKEN
-                    """
+                  sh '''
+                  npx sonar-scanner \
+                    -Dsonar.projectKey=angular-devops \
+                    -Dsonar.sources=src \
+                    -Dsonar.host.url=$SONAR_HOST_URL \
+                    -Dsonar.login=$SONAR_AUTH_TOKEN
+                '''
                 }
             }
         }
