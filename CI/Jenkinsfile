@@ -35,15 +35,38 @@ pipeline {
             }
         }
 
+        stage('SonarQube analysis') {
+            environment {
+                scannerHome = tool 'SonarQube'   // Defined in Jenkins Global Tool Config
+            }
+            steps {
+                withSonarQubeEnv('SonarQube') {         // Defined in Jenkins "Configure System"
+                    sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                          -Dsonar.projectKey=angular-devops \
+                          -Dsonar.projectName=angular-devops \
+                          -Dsonar.sources=src \
+                          -Dsonar.tests=src \
+                          -Dsonar.typescript.tsconfigPath=tsconfig.json \
+                          -Dsonar.exclusions=node_modules/** \
+                          -Dsonar.test.inclusions=**/*.spec.ts \
+                          -Dsonar.testExecutionReportPaths=test-reports/ut_report.xml
+                    """
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
+                  sh "chmod 777 /var/jenkins_home/workspace/angular-devops-ci/node_modules/sonar-scanner/bin/sonar-scanner"
                   sh """
-                  sudo npm run sonar-npx -- -Dsonar.projectKey=angular-devops -Dsonar.host.url=http://localhost:9000 -Dsonar.login=${SONAR_AUTH_TOKEN}
+                  npm run sonar -- -Dsonar.projectKey=angular-devops -Dsonar.host.url=http://localhost:9000 -Dsonar.login=${SONAR_AUTH_TOKEN}
                         """
                 }
             }
         }
+
 
         stage('Build Docker Image') {
             steps {
