@@ -38,14 +38,13 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh 'chmod +x ./node_modules/.bin/sonar-scanner'
-                    sh """
-                        ./node_modules/.bin/sonar-scanner \
+                  sh """
+                        sonar-scanner \
                           -Dsonar.projectKey=angular-devops \
                           -Dsonar.sources=src \
-                          -Dsonar.host.url=$SONAR_HOST_URL \
-                          -Dsonar.login=$SONAR_AUTH_TOKEN
-                    """
+                          -Dsonar.host.url=http://sonarqube:9000 \
+                          -Dsonar.login=${SONAR_AUTH_TOKEN}
+                        """
                 }
             }
         }
