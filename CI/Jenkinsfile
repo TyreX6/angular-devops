@@ -38,6 +38,7 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
+                  sh 'sleep 120'
                   sh """
                   npm run sonar-npx -- -Dsonar.projectKey=angular-devops -Dsonar.host.url=http://localhost:9000 -Dsonar.login=${SONAR_AUTH_TOKEN}
                         """
