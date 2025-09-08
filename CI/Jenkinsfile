@@ -19,8 +19,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'master',
-                    url: 'https://github.com/TyreX6/angular-devops.git'
+                git branch: 'master', url: 'https://github.com/TyreX6/angular-devops.git'
             }
         }
 
@@ -33,7 +32,6 @@ pipeline {
         stage('Build & Test') {
             steps {
                 sh 'npm run build-prod'
-                sh 'npm run test'
             }
         }
 

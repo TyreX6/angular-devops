@@ -1,8 +1,8 @@
-version: '3.8'
-
 services:
   jenkins:
-    build: ./CI
+    build:
+      context: ./CI
+      dockerfile: Dockerfile  # Custom Dockerfile for Jenkins
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -11,6 +11,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - devops
+    environment:
+      - JENKINS_OPTS=--httpPort=8080
 
   sonarqube:
     image: sonarqube:lts
