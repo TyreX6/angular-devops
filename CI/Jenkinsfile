@@ -39,11 +39,7 @@ pipeline {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
                   sh """
-                        sonar-scanner \
-                          -Dsonar.projectKey=angular-devops \
-                          -Dsonar.sources=src \
-                          -Dsonar.host.url=http://sonarqube:9000 \
-                          -Dsonar.login=${SONAR_AUTH_TOKEN}
+                  npm run sonar -- -Dsonar.projectKey=angular-devops -Dsonar.host.url=http://sonarqube:9000 -Dsonar.login=${SONAR_AUTH_TOKEN}
                         """
                 }
             }
