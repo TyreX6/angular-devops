@@ -1,0 +1,80 @@
+pipeline {
+    agent {
+        docker {
+            image 'node:20'
+        }
+    }
+
+    environment {
+        // Docker Hub credentials ID (configure in Jenkins -> Credentials)
+        DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
+        DOCKER_HUB_USER = 'your-dockerhub-username'
+        IMAGE_NAME = 'your-dockerhub-username/angular-app'
+        IMAGE_TAG = 'latest'
+
+        // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
+        SONARQUBE_ENV = 'SonarQube'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    url: 'https://github.com/your-repo/angular-app.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'npm install -g @angular/cli'
+                sh 'npm install'
+            }
+        }
+
+        stage('Build & Test') {
+            steps {
+                sh 'ng build --configuration production'
+                sh 'ng test --watch=false --browsers=ChromeHeadless || true'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh """
+                        ./node_modules/.bin/sonar-scanner \
+                          -Dsonar.projectKey=angular-app \
+                          -Dsonar.sources=src \
+                          -Dsonar.host.url=$SONAR_HOST_URL \
+                          -Dsonar.login=$SONAR_AUTH_TOKEN
+                    """
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        stage('Push to Docker Hub') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}
