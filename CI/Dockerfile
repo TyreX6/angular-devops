@@ -2,9 +2,15 @@ FROM jenkins/jenkins:lts
 
 USER root
 
-# Install Docker CLI
+# Install Docker
 RUN apt-get update && \
-    apt-get install -y docker.io && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y \
+    ca-certificates \
+    curl \
+    sudo && \
+    curl -fsSL https://get.docker.com -o install-docker.sh && \
+    sudo sh install-docker.sh && \
+    sudo usermod -a -G docker jenkins
 
-USER jenkins
+# Expose Jenkins port
+EXPOSE 8080

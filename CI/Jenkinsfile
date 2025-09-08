@@ -20,7 +20,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'master',
-                    url: 'https://github.com/TyreX6/angular-devops'
+                    url: 'https://github.com/TyreX6/angular-devops.git'
             }
         }
 
