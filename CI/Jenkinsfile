@@ -1,9 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:20'
-        }
-    }
+    agent any
 
     environment {
         // Docker Hub credentials ID (configure in Jenkins -> Credentials)
@@ -24,23 +20,33 @@ pipeline {
         }
 
         stage('Install Dependencies') {
+            agent {
+                docker {
+                    image 'node:20'
+                }
+            }
             steps {
                 sh 'npm install'
             }
         }
 
         stage('Build & Test') {
+            agent {
+                docker {
+                    image 'node:20'
+                }
+            }
             steps {
                 sh 'npm run build-prod'
+                stash includes: 'dist/**', name: 'angular-devops-dist'
             }
         }
-
 
         stage('SonarQube analysis') {
             agent {
                 docker {
                     image 'sonarsource/sonar-scanner-cli:latest'
-                    args '-u root --network=host'
+                    args '-u root --network=devops_network'
                     // -u root (run as root inside container if needed)
                     // --network=host (so container can reach SonarQube on host machine)
                 }
@@ -51,26 +57,24 @@ pipeline {
             }
             steps {
                 sh """
-                    sonar-scanner \
+                sonar-scanner \
                       -Dsonar.projectKey=angular-devops \
                       -Dsonar.projectName=angular-devops \
                       -Dsonar.sources=src \
-                      -Dsonar.tests=src \
                       -Dsonar.typescript.tsconfigPath=tsconfig.json \
                       -Dsonar.exclusions=node_modules/** \
-                      -Dsonar.test.inclusions=**/*.spec.ts \
-                      -Dsonar.testExecutionReportPaths=test-reports/ut_report.xml \
-                      -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
                       -Dsonar.host.url=${SONAR_HOST_URL} \
                       -Dsonar.login=${SONAR_TOKEN}
-                """
+                      """
             }
         }
 
-
         stage('Build Docker Image') {
             steps {
+                unstash 'angular-devops-dist'
                 script {
+                    sh "ls -l"
+                    sh "pwd"
                     sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
                 }
             }

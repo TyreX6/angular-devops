@@ -3,6 +3,7 @@ services:
     build:
       context: ./CI
       dockerfile: Dockerfile  # Custom Dockerfile for Jenkins
+    user: root
     ports:
       - "8080:8080"
       - "50000:50000"
@@ -42,6 +43,7 @@ services:
 networks:
   devops:
     driver: bridge
+    name: devops_network   # 👈 fixed network name (no prefixing)
 
 volumes:
   jenkins_home:
