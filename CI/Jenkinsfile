@@ -73,9 +73,9 @@ pipeline {
             steps {
                 unstash 'angular-devops-dist'
                 script {
-                    sh "ls -l"
                     sh "pwd"
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                    COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                    sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
                 }
             }
         }
@@ -91,6 +91,25 @@ pipeline {
             }
         }
     }
+
+        stage('Update Deployment File') {
+            environment {
+                GIT_REPO_NAME = "angular-devops"
+                GIT_USER_NAME = "TyreX6"
+            }
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh '''
+                        git config user.email "ghandrisemh@gmail.com"
+                        git config user.name "Ghandri Sameh"
+                        sed -i "s/tag: .*/tag: \"${COMMIT_SHA}\"/" helm/app/values.yaml
+                        git add helm/app/values.yaml
+                        git commit -m "Update deployment image to version ${COMMIT_SHA}"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
+                    '''
+                }
+            }
+        }
 
     post {
         always {
