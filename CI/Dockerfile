@@ -1,6 +1,10 @@
-FROM jenkins/jenkins:lts
+FROM jenkins/jenkins:lts-jdk17
 
+# Switch to root to install Maven and Docker
 USER root
+
+# Install Maven
+RUN apt-get update && apt-get install -y maven
 
 # Install Docker
 RUN apt-get update && \
