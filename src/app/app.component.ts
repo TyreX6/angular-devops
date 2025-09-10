@@ -12,4 +12,5 @@ export class AppComponent {
   Description = 'This is an Angular application integrated with Azure DevOps for CI/CD.';
   SecondDescription = 'This is new build';
   ThirdDescription = 'This is another new build';
+  FourthDescription = 'This is another new build to test port forward';
 }
