@@ -106,6 +106,9 @@ pipeline {
                         # Update Helm values.yaml with new commit SHA
                         sed -i 's/tag: .*/tag: "${COMMIT_SHA}"/' helm/app/values.yaml
 
+                        # Make sure branch is up to date
+                        git pull --rebase origin ${env.BRANCH_NAME}
+
                         git add helm/app/values.yaml
                         git commit -m "Update deployment image to version ${COMMIT_SHA}" || echo "No changes to commit"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:refs/heads/${env.BRANCH_NAME}
