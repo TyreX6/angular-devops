@@ -68,7 +68,7 @@ pipeline {
                 script {
                     sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
+                    sh "docker build -t ${IMAGE_NAME}:${env.COMMIT_SHA} ."
                 }
             }
         }
@@ -89,6 +89,7 @@ pipeline {
             }
             steps {
                 withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    sh '${env.COMMIT_SHA}'
                     sh '''
                         git config user.email "ghandrisemh@gmail.com"
                         git config user.name "Ghandri Sameh"
