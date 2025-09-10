@@ -10,11 +10,6 @@ pipeline {
         SONARQUBE_ENV = 'SonarQube'
     }
     stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'master', url: 'https://github.com/TyreX6/angular-devops.git'
-            }
-        }
         stage('Install Dependencies') {
             agent {
                 docker {
