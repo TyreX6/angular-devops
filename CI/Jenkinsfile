@@ -67,7 +67,7 @@ pipeline {
                 unstash 'angular-devops-dist'
                 script {
                     sh "pwd"
-                    COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                    env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
                     sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
                 }
             }
@@ -92,9 +92,9 @@ pipeline {
                     sh '''
                         git config user.email "ghandrisemh@gmail.com"
                         git config user.name "Ghandri Sameh"
-                        sed -i "s/tag: .*/tag: \"${COMMIT_SHA}\"/" helm/app/values.yaml
+                        sed -i "s/tag: .*/tag: \"${env.COMMIT_SHA}\"/" helm/app/values.yaml
                         git add helm/app/values.yaml
-                        git commit -m "Update deployment image to version ${COMMIT_SHA}"
+                        git commit -m "Update deployment image to version ${env.COMMIT_SHA}"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
                     '''
                 }
