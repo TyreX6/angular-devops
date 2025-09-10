@@ -10,4 +10,5 @@ var Description;
 export class AppComponent {
   title = 'angular-devops';
   Description = 'This is an Angular application integrated with Azure DevOps for CI/CD.';
+  SecondDescription = 'This is an Angular application integrated with Azure DevOps for CI/CD.';
 }
