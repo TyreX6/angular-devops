@@ -1,24 +1,20 @@
 pipeline {
     agent any
-
     environment {
         // Docker Hub credentials ID (configure in Jenkins -> Credentials)
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
         DOCKER_HUB_USER = 'ghandrisemh'
         IMAGE_NAME = 'ghandrisemh/angular-devops'
         IMAGE_TAG = 'latest'
-
         // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
     }
-
     stages {
         stage('Checkout') {
             steps {
                 git branch: 'master', url: 'https://github.com/TyreX6/angular-devops.git'
             }
         }
-
         stage('Install Dependencies') {
             agent {
                 docker {
@@ -29,7 +25,6 @@ pipeline {
                 sh 'npm install'
             }
         }
-
         stage('Build & Test') {
             agent {
                 docker {
@@ -41,7 +36,6 @@ pipeline {
                 stash includes: 'dist/**', name: 'angular-devops-dist'
             }
         }
-
         stage('SonarQube analysis') {
             agent {
                 docker {
@@ -53,7 +47,7 @@ pipeline {
             }
             environment {
                 SONAR_HOST_URL = 'http://sonarqube:9000'  // change if needed
-                SONAR_TOKEN    = credentials('sonarqube')  // Jenkins credential ID
+                SONAR_TOKEN = credentials('sonarqube')  // Jenkins credential ID
             }
             steps {
                 sh """
@@ -62,13 +56,11 @@ pipeline {
                       -Dsonar.projectName=angular-devops \
                       -Dsonar.sources=src \
                       -Dsonar.typescript.tsconfigPath=tsconfig.json \
-                      -Dsonar.exclusions=node_modules/** \
                       -Dsonar.host.url=${SONAR_HOST_URL} \
                       -Dsonar.login=${SONAR_TOKEN}
                       """
             }
         }
-
         stage('Build Docker Image') {
             steps {
                 unstash 'angular-devops-dist'
@@ -79,7 +71,6 @@ pipeline {
                 }
             }
         }
-
         stage('Push to Docker Hub') {
             steps {
                 script {
@@ -90,8 +81,6 @@ pipeline {
                 }
             }
         }
-    }
-
         stage('Update Deployment File') {
             environment {
                 GIT_REPO_NAME = "angular-devops"
@@ -110,10 +99,9 @@ pipeline {
                 }
             }
         }
-
-    post {
-        always {
-            cleanWs()
+        post {
+            always {
+                cleanWs()
+            }
         }
     }
-}
