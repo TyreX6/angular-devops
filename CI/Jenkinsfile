@@ -8,6 +8,7 @@ pipeline {
         IMAGE_TAG = 'latest'
         // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
+        COMMIT_SHA = 'V1.0'
     }
     stages {
         stage('Checkout') {
