@@ -8,6 +8,7 @@ pipeline {
         IMAGE_TAG = 'latest'
         // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
+        BUILD_ENV = 'PROD'
     }
     stages {
         // --------------------------
@@ -52,7 +53,7 @@ pipeline {
             }
             when {
                 anyOf {
-                    branch 'main'
+                    branch 'master'
                     branch 'develop'
                     branch pattern: "feature/.*", comparator: "REGEXP"
                 }
@@ -78,7 +79,7 @@ pipeline {
                 script {
                     sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
+                    sh "docker build -t ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA} ."
                 }
             }
         }
@@ -87,7 +88,7 @@ pipeline {
                 script {
                     withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                        sh "docker push ${IMAGE_NAME}:${COMMIT_SHA}"
+                        sh "docker push ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA}"
                     }
                 }
             }
@@ -107,10 +108,10 @@ pipeline {
                         git pull --rebase origin ${env.BRANCH_NAME}
 
                         # Update Helm values.yaml with new commit SHA
-                        sed -i 's/tag: .*/tag: "${COMMIT_SHA}"/' helm/app/values.yaml
+                        sed -i 's/tag: .*/tag: "${BUILD_ENV}-${COMMIT_SHA}"/' helm/app/values.yaml
 
                         git add helm/app/values.yaml
-                        git commit -m "Update deployment image to version ${COMMIT_SHA}" || echo "No changes to commit"
+                        git commit -m "Update deployment image to version ${BUILD_ENV}-${COMMIT_SHA}" || echo "No changes to commit"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:refs/heads/${env.BRANCH_NAME}
                     """
                 }
