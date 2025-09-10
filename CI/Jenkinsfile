@@ -8,7 +8,6 @@ pipeline {
         IMAGE_TAG = 'latest'
         // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
-        COMMIT_SHA = 'V1.0'
     }
     stages {
         stage('Checkout') {
@@ -69,7 +68,7 @@ pipeline {
                 script {
                     sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh "docker build -t ${IMAGE_NAME}:${env.COMMIT_SHA} ."
+                    sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
                 }
             }
         }
@@ -95,10 +94,10 @@ pipeline {
                         git config user.name "Ghandri Sameh"
 
                         # Update Helm values.yaml with new commit SHA
-                        sed -i 's/tag: .*/tag: "${env.COMMIT_SHA}"/' helm/app/values.yaml
+                        sed -i 's/tag: .*/tag: "${COMMIT_SHA}"/' helm/app/values.yaml
 
                         git add helm/app/values.yaml
-                        git commit -m "Update deployment image to version ${env.COMMIT_SHA}" || echo "No changes to commit"
+                        git commit -m "Update deployment image to version ${COMMIT_SHA}" || echo "No changes to commit"
                         git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:master
                     """
                 }
