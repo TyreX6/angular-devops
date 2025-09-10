@@ -68,8 +68,8 @@ pipeline {
                 unstash 'angular-devops-dist'
                 script {
                     sh "pwd"
-                    COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh "docker build -t ${IMAGE_NAME}:${COMMIT_SHA} ."
+                    env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                    sh "docker build -t ${IMAGE_NAME}:${env.COMMIT_SHA} ."
                 }
             }
         }
@@ -90,15 +90,17 @@ pipeline {
             }
             steps {
                 withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                    COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh '''
+                    sh """
                         git config user.email "ghandrisemh@gmail.com"
                         git config user.name "Ghandri Sameh"
-                        sed -i "s/tag: .*/tag: \"${COMMIT_SHA}\"/" helm/app/values.yaml
+
+                        # Update Helm values.yaml with new commit SHA
+                        sed -i 's/tag: .*/tag: "${env.COMMIT_SHA}"/' helm/app/values.yaml
+
                         git add helm/app/values.yaml
-                        git commit -m "Update deployment image to version ${COMMIT_SHA}"
-                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
-                    '''
+                        git commit -m "Update deployment image to version ${env.COMMIT_SHA}" || echo "No changes to commit"
+                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:master
+                    """
                 }
             }
         }
