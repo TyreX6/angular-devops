@@ -103,11 +103,11 @@ pipeline {
                         git config user.email "ghandrisemh@gmail.com"
                         git config user.name "Ghandri Sameh"
 
-                        # Update Helm values.yaml with new commit SHA
-                        sed -i 's/tag: .*/tag: "${COMMIT_SHA}"/' helm/app/values.yaml
-
                         # Make sure branch is up to date
                         git pull --rebase origin ${env.BRANCH_NAME}
+
+                        # Update Helm values.yaml with new commit SHA
+                        sed -i 's/tag: .*/tag: "${COMMIT_SHA}"/' helm/app/values.yaml
 
                         git add helm/app/values.yaml
                         git commit -m "Update deployment image to version ${COMMIT_SHA}" || echo "No changes to commit"
