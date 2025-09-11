@@ -14,10 +14,12 @@ pipeline {
         // --------------------------
         stage('Checkout') {
             steps {
+            // For multi-branch pipelines, use the following to checkout the current branch
                 checkout scm
             }
         }
         stage('Install Dependencies') {
+            // Use Docker agent for Node.js tasks
             agent {
                 docker {
                     image 'node:20'
@@ -28,6 +30,7 @@ pipeline {
             }
         }
         stage('Build & Test') {
+        // Use Docker agent for Node.js tasks
             agent {
                 docker {
                     image 'node:20'
@@ -51,6 +54,8 @@ pipeline {
                 SONAR_HOST_URL = 'http://sonarqube:9000'  // change if needed
                 SONAR_TOKEN = credentials('sonarqube')  // Jenkins credential ID
             }
+
+            // Only run SonarQube analysis on specific branches
             when {
                 anyOf {
                     branch 'master'
@@ -59,18 +64,25 @@ pipeline {
                 }
             }
             steps {
+                // Ask for manual confirmation before scanning
                 input message: "Scan the project?", ok: "Scan now"
-                echo "🚀 Scanning the project"
-                sh """
-                sonar-scanner \
-                      -Dsonar.projectKey=angular-devops \
-                      -Dsonar.projectName=angular-devops \
-                      -Dsonar.sources=src \
-                      -Dsonar.exclusions=node_modules/** \
-                      -Dsonar.typescript.tsconfigPath=tsconfig.json \
-                      -Dsonar.host.url=${SONAR_HOST_URL} \
-                      -Dsonar.login=${SONAR_TOKEN}
-                      """
+                // Use try-catch to handle timeout or abort scenarios
+                catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
+                                timeout(time: 3, unit: 'MINUTES') {
+                                    input message: "Scan the project?", ok: "Scan now"
+                                }
+                                echo "🚀 Scanning the project"
+                                sh """
+                                sonar-scanner \
+                                      -Dsonar.projectKey=angular-devops \
+                                      -Dsonar.projectName=angular-devops \
+                                      -Dsonar.sources=src \
+                                      -Dsonar.exclusions=node_modules/** \
+                                      -Dsonar.typescript.tsconfigPath=tsconfig.json \
+                                      -Dsonar.host.url=${SONAR_HOST_URL} \
+                                      -Dsonar.login=${SONAR_TOKEN}
+                                      """
+                            }
             }
         }
         stage('Build Docker Image') {
