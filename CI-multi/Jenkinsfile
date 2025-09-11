@@ -55,6 +55,7 @@ pipeline {
                     }
                     when {
                         anyOf {
+                            buildingTag() // any tag
                             branch 'master'
                             branch 'develop'
                             branch pattern: "feature/.*", comparator: "REGEXP"
@@ -99,7 +100,15 @@ pipeline {
                 script {
                     sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-                    sh "docker build -t ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA} ."
+                    // Dynamically set the image tag: use TAG_NAME if building a tag, otherwise BUILD_ENV-COMMIT_SHA
+                    if (env.TAG_NAME) {
+                      echo "📦 Building Docker image for tag: ${env.TAG_NAME}"
+                      env.FINAL_IMAGE_TAG = "${env.TAG_NAME}"
+                    } else {
+                      echo "📦 Building Docker image for branch: ${env.BRANCH_NAME}"
+                      env.FINAL_IMAGE_TAG = "${BUILD_ENV}-${COMMIT_SHA}"
+                    }
+                    sh "docker build -t ${IMAGE_NAME}:${FINAL_IMAGE_TAG} ."
                 }
             }
         }
@@ -116,7 +125,7 @@ pipeline {
                         )
                     ]) {
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                        sh "docker push ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA}"
+                        sh "docker push ${IMAGE_NAME}:${FINAL_IMAGE_TAG}"
                     }
                 }
             }
