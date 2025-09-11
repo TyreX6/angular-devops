@@ -1,8 +1,12 @@
 pipeline {
-  agent any
+    agent any
+
+    options {
+        timestamps()               // Adds timestamps to console output
+    }
 
     environment {
-    // Docker Hub credentials ID (configure in Jenkins -> Credentials)
+        // Docker Hub credentials ID (configure in Jenkins -> Credentials)
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
         DOCKER_HUB_USER        = 'ghandrisemh'
         IMAGE_NAME             = 'ghandrisemh/angular-devops'
@@ -16,52 +20,49 @@ pipeline {
     }
 
     stages {
-    // --------------------------
+        // --------------------------
         stage('Checkout') {
-      steps {
-        // For multi-branch pipelines, use the following to checkout the current branch
+            steps {
                 checkout scm
             }
         }
 
         // --------------------------
         stage('Parallel Stages') {
-      failFast true
+            failFast true
             parallel {
-        stage('Install Dependencies') {
-          agent {
-            docker {
-              image 'node:20'
+                stage('Install Dependencies') {
+                    agent {
+                        docker {
+                            image 'node:20'
                         }
                     }
                     steps {
-            sh 'npm install'
+                        sh 'npm install'
                     }
                 }
 
                 stage('SonarQube Analysis') {
-          agent {
-            docker {
-              image 'sonarsource/sonar-scanner-cli:latest'
+                    agent {
+                        docker {
+                            image 'sonarsource/sonar-scanner-cli:latest'
                             args '-u root --network=devops_network'
-                            // -u root (run as root inside container if needed)
-                            // --network=devops_network (so container can reach SonarQube)
                         }
                     }
                     environment {
-            SONAR_HOST_URL = 'http://sonarqube:9000' // change if needed
-                        SONAR_TOKEN    = credentials('sonarqube') // Jenkins credential ID
+                        SONAR_HOST_URL = 'http://sonarqube:9000'
+                        SONAR_TOKEN    = credentials('sonarqube')
                     }
                     when {
-            anyOf {
-              branch 'master'
+                        anyOf {
+                            branch 'master'
                             branch 'develop'
                             branch pattern: "feature/.*", comparator: "REGEXP"
                         }
                     }
                     steps {
-            script {
-              echo "🚀 Scanning the project"
+                        script {
+                            echo "🚀 Scanning the project"
                             sh """
                                 sonar-scanner \
                                   -Dsonar.projectKey=angular-devops \
@@ -80,23 +81,23 @@ pipeline {
 
         // --------------------------
         stage('Build & Test') {
-      agent {
-        docker {
-          image 'node:20'
+            agent {
+                docker {
+                    image 'node:20'
                 }
             }
             steps {
-        sh 'npm run build-prod'
+                sh 'npm run build-prod'
                 stash includes: 'dist/**', name: 'angular-devops-dist'
             }
         }
 
         // --------------------------
         stage('Build Docker Image') {
-      steps {
-        unstash 'angular-devops-dist'
+            steps {
+                unstash 'angular-devops-dist'
                 script {
-          sh "pwd"
+                    sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA} ."
                 }
@@ -105,16 +106,16 @@ pipeline {
 
         // --------------------------
         stage('Push to Docker Hub') {
-      steps {
-        script {
-          withCredentials([
+            steps {
+                script {
+                    withCredentials([
                         usernamePassword(
                             credentialsId: "${DOCKER_HUB_CREDENTIALS}",
                             usernameVariable: 'DOCKER_USER',
                             passwordVariable: 'DOCKER_PASS'
                         )
                     ]) {
-            sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
                         sh "docker push ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA}"
                     }
                 }
@@ -123,18 +124,18 @@ pipeline {
 
         // --------------------------
         stage('Update Deployment File') {
-      agent any
+            agent any
             environment {
-        GIT_REPO_NAME = "angular-devops"
+                GIT_REPO_NAME = "angular-devops"
                 GIT_USER_NAME = "TyreX6"
             }
             when {
-        expression { return env.BRANCH_NAME && env.BRANCH_NAME != "PR-*" } // skip for PR builds
+                expression { return env.BRANCH_NAME && env.BRANCH_NAME != "PR-*" }
             }
             steps {
-        script {
-          catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
-            def proceed = input(
+                script {
+                    catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
+                        def deploy = input(
                             message: "Update Deployment file on Repo?",
                             ok: "Update",
                             parameters: [
@@ -142,9 +143,9 @@ pipeline {
                             ]
                         )
 
-                        if (proceed) {
-              withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                sh '''
+                        if (deploy) {
+                            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                                sh '''
                                     set -e
                                     set -x
 
@@ -179,7 +180,7 @@ pipeline {
                                 '''
                             }
                         } else {
-              echo "⏭️ Skipped Update Deployment file"
+                            echo "⏭️ Skipped Update Deployment file"
                         }
                     }
                 }
@@ -188,8 +189,8 @@ pipeline {
     }
 
     post {
-    always {
-      cleanWs()
+        always {
+            cleanWs()
         }
     }
 }
