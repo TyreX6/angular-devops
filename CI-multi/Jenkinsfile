@@ -1,143 +1,195 @@
 pipeline {
-    agent any
+  agent any
+
     environment {
-        // Docker Hub credentials ID (configure in Jenkins -> Credentials)
+    // Docker Hub credentials ID (configure in Jenkins -> Credentials)
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
-        DOCKER_HUB_USER = 'ghandrisemh'
-        IMAGE_NAME = 'ghandrisemh/angular-devops'
-        IMAGE_TAG = 'latest'
+        DOCKER_HUB_USER        = 'ghandrisemh'
+        IMAGE_NAME             = 'ghandrisemh/angular-devops'
+        IMAGE_TAG              = 'latest'
+
         // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
+
+        // Build environment
         BUILD_ENV = 'PROD'
     }
+
     stages {
-        // --------------------------
+    // --------------------------
         stage('Checkout') {
-            steps {
-                // For multi-branch pipelines, use the following to checkout the current branch
+      steps {
+        // For multi-branch pipelines, use the following to checkout the current branch
                 checkout scm
             }
         }
+
+        // --------------------------
+        stage('Parallel Stages') {
+      failFast true
+            parallel {
         stage('Install Dependencies') {
-            // Use Docker agent for Node.js tasks
-            agent {
-                docker {
-                    image 'node:20'
+          agent {
+            docker {
+              image 'node:20'
+                        }
+                    }
+                    steps {
+            sh 'npm install'
+                    }
                 }
-            }
-            steps {
-                sh 'npm install'
-            }
-        }
-        stage('Build & Test') {
-            // Use Docker agent for Node.js tasks
-            agent {
-                docker {
-                    image 'node:20'
-                }
-            }
-            steps {
-                sh 'npm run build-prod'
-                stash includes: 'dist/**', name: 'angular-devops-dist'
-            }
-        }
-        stage('SonarQube analysis') {
-            agent {
-                docker {
-                    image 'sonarsource/sonar-scanner-cli:latest'
-                    args '-u root --network=devops_network'
-                    // -u root (run as root inside container if needed)
-                    // --network=host (so container can reach SonarQube on host machine)
-                }
-            }
-            environment {
-                SONAR_HOST_URL = 'http://sonarqube:9000'  // change if needed
-                SONAR_TOKEN = credentials('sonarqube')  // Jenkins credential ID
-            }
-            // Only run SonarQube analysis on specific branches
-            when {
-                anyOf {
-                    branch 'master'
-                    branch 'develop'
-                    branch pattern: "feature/.*", comparator: "REGEXP"
-                }
-            }
-            steps {
-                script {
-                    catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
-                        // Ask for manual confirmation before scanning
-                        def proceed = input(
-                            message: "Scan the project?",
-                            ok: "Scan now",
-                            parameters: [booleanParam(defaultValue: false, description: '', name: 'SCAN')]
-                        )
-                        if (proceed) {
-                            echo "🚀 Scanning the project"
+
+                stage('SonarQube Analysis') {
+          agent {
+            docker {
+              image 'sonarsource/sonar-scanner-cli:latest'
+                            args '-u root --network=devops_network'
+                            // -u root (run as root inside container if needed)
+                            // --network=devops_network (so container can reach SonarQube)
+                        }
+                    }
+                    environment {
+            SONAR_HOST_URL = 'http://sonarqube:9000' // change if needed
+                        SONAR_TOKEN    = credentials('sonarqube') // Jenkins credential ID
+                    }
+                    when {
+            anyOf {
+              branch 'master'
+                            branch 'develop'
+                            branch pattern: "feature/.*", comparator: "REGEXP"
+                        }
+                    }
+                    steps {
+            script {
+              echo "🚀 Scanning the project"
                             sh """
-                                        sonar-scanner \
-                                          -Dsonar.projectKey=angular-devops \
-                                          -Dsonar.projectName=angular-devops \
-                                          -Dsonar.sources=src \
-                                          -Dsonar.exclusions=node_modules/** \
-                                          -Dsonar.typescript.tsconfigPath=tsconfig.json \
-                                          -Dsonar.host.url=${SONAR_HOST_URL} \
-                                          -Dsonar.login=${SONAR_TOKEN}
-                                    """
-                        } else {
-                            echo "⏭️ Skipped Sonar Scan"
+                                sonar-scanner \
+                                  -Dsonar.projectKey=angular-devops \
+                                  -Dsonar.projectName=angular-devops \
+                                  -Dsonar.sources=src \
+                                  -Dsonar.exclusions=node_modules/** \
+                                  -Dsonar.typescript.tsconfigPath=tsconfig.json \
+                                  -Dsonar.host.url=${SONAR_HOST_URL} \
+                                  -Dsonar.login=${SONAR_TOKEN}
+                            """
                         }
                     }
                 }
             }
         }
-        stage('Build Docker Image') {
+
+        // --------------------------
+        stage('Build & Test') {
+      agent {
+        docker {
+          image 'node:20'
+                }
+            }
             steps {
-                unstash 'angular-devops-dist'
+        sh 'npm run build-prod'
+                stash includes: 'dist/**', name: 'angular-devops-dist'
+            }
+        }
+
+        // --------------------------
+        stage('Build Docker Image') {
+      steps {
+        unstash 'angular-devops-dist'
                 script {
-                    sh "pwd"
+          sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
                     sh "docker build -t ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA} ."
                 }
             }
         }
+
+        // --------------------------
         stage('Push to Docker Hub') {
-            steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: "${DOCKER_HUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+      steps {
+        script {
+          withCredentials([
+                        usernamePassword(
+                            credentialsId: "${DOCKER_HUB_CREDENTIALS}",
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS'
+                        )
+                    ]) {
+            sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
                         sh "docker push ${IMAGE_NAME}:${BUILD_ENV}-${COMMIT_SHA}"
                     }
                 }
             }
         }
+
+        // --------------------------
         stage('Update Deployment File') {
+      agent any
             environment {
-                GIT_REPO_NAME = "angular-devops"
+        GIT_REPO_NAME = "angular-devops"
                 GIT_USER_NAME = "TyreX6"
             }
+            when {
+        expression { return env.BRANCH_NAME && env.BRANCH_NAME != "PR-*" } // skip for PR builds
+            }
             steps {
-                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                    sh """
-                        git config user.email "ghandrisemh@gmail.com"
-                        git config user.name "Ghandri Sameh"
+        script {
+          catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
+            def proceed = input(
+                            message: "Update Deployment file on Repo?",
+                            ok: "Update",
+                            parameters: [
+                                booleanParam(defaultValue: false, description: '', name: 'UPDATE')
+                            ]
+                        )
 
-                        # Make sure branch is up to date
-                        git pull --rebase origin ${env.BRANCH_NAME}
+                        if (proceed) {
+              withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                sh '''
+                                    set -e
+                                    set -x
 
-                        # Update Helm values.yaml with new commit SHA
-                        sed -i 's/tag: .*/tag: "${BUILD_ENV}-${COMMIT_SHA}"/' helm/app/values.yaml
+                                    if [ -z "$COMMIT_SHA" ] || [ -z "$BUILD_ENV" ]; then
+                                        echo "❌ Missing COMMIT_SHA or BUILD_ENV"
+                                        exit 1
+                                    fi
 
-                        git add helm/app/values.yaml
-                        git commit -m "Update deployment image to version ${BUILD_ENV}-${COMMIT_SHA}" || echo "No changes to commit"
-                        git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:refs/heads/${env.BRANCH_NAME}
-                    """
+                                    git config user.email "ghandrisemh@gmail.com"
+                                    git config user.name "Ghandri Sameh"
+
+                                    # Ensure branch is up-to-date
+                                    git fetch origin
+                                    git checkout "$BRANCH_NAME"
+                                    git rebase "origin/$BRANCH_NAME"
+
+                                    # Update Helm values.yaml safely
+                                    sed -i "s|tag: .*|tag: ${BUILD_ENV}-${COMMIT_SHA}|" helm/app/values.yaml
+
+                                    git add helm/app/values.yaml
+                                    git commit -m "Update deployment image to version ${BUILD_ENV}-${COMMIT_SHA}" || echo "No changes to commit"
+
+                                    # Retry push to avoid transient failures
+                                    n=0
+                                    until [ $n -ge 3 ]
+                                    do
+                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "HEAD:refs/heads/$BRANCH_NAME" && break
+                                        n=$((n+1))
+                                        echo "⚠️ Push failed, retrying ($n/3)..."
+                                        sleep 3
+                                    done
+                                '''
+                            }
+                        } else {
+              echo "⏭️ Skipped Update Deployment file"
+                        }
+                    }
                 }
             }
         }
     }
+
     post {
-        always {
-            cleanWs()
+    always {
+      cleanWs()
         }
     }
 }

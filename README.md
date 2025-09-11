@@ -65,6 +65,9 @@ For more information on using the Angular CLI, including detailed command refere
 
 ![img_1.png](img_1.png)
 
+```bash
+cat /var/jenkins_home/secrets/initialAdminPassword
+```
 
 ## Kubernetes Cluster
 ```bash
