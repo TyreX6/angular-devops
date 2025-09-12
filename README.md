@@ -57,3 +57,33 @@ Angular CLI does not come with an end-to-end testing framework by default. You c
 ## Additional Resources
 
 For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+
+
+## JENKINS
+
+![img.png](img.png)
+
+![img_1.png](img_1.png)
+
+```bash
+cat /var/jenkins_home/secrets/initialAdminPassword
+```
+
+## Kubernetes Cluster
+```bash
+minikube start --driver=docker --cpus 4 --memory 10240
+kubectl create ns app
+```
+## Install ArgoCD in Kubernetes Cluster
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl get pods -n argocd
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+```
+Access ArgoCD UI at http://localhost:8080
+Default username: admin
+Get default password:
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+```         
