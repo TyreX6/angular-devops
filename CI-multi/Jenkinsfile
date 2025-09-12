@@ -6,17 +6,13 @@ pipeline {
     }
 
     environment {
-        // Docker Hub credentials ID (configure in Jenkins -> Credentials)
         DOCKER_HUB_CREDENTIALS = 'dockerhub-credentials'
         DOCKER_HUB_USER        = 'ghandrisemh'
         IMAGE_NAME             = 'ghandrisemh/angular-devops'
         IMAGE_TAG              = 'latest'
 
-        // SonarQube installation name (configure in Jenkins -> Manage Jenkins -> Configure System)
         SONARQUBE_ENV = 'SonarQube'
-
-        // Build environment
-        BUILD_ENV = 'PROD'
+        BUILD_ENV     = 'PROD'
     }
 
     stages {
@@ -24,24 +20,29 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                script {
+                    env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+                }
             }
         }
 
         // --------------------------
-        stage('Parallel Stages') {
-            failFast true
-            parallel {
-                stage('Install Dependencies') {
-                    agent {
-                        docker {
-                            image 'node:20'
-                        }
-                    }
-                    steps {
-                        sh 'npm install'
-                    }
+        stage('Install Dependencies') {
+            agent {
+                docker {
+                    image 'node:20'
                 }
+            }
+            steps {
+                echo "📦 Installing dependencies..."
+                sh 'npm ci'
+                stash includes: 'node_modules/**', name: 'node-modules'
+            }
+        }
 
+        // --------------------------
+        stage('Analyze & Build in Parallel') {
+            parallel {
                 stage('SonarQube Analysis') {
                     agent {
                         docker {
@@ -55,13 +56,14 @@ pipeline {
                     }
                     when {
                         anyOf {
-                            buildingTag() // any tag
+                            buildingTag()
                             branch 'master'
                             branch 'develop'
                             branch pattern: "feature/.*", comparator: "REGEXP"
                         }
                     }
                     steps {
+                        unstash 'node-modules'
                         script {
                             echo "🚀 Scanning the project"
                             sh """
@@ -77,19 +79,20 @@ pipeline {
                         }
                     }
                 }
-            }
-        }
 
-        // --------------------------
-        stage('Build & Test') {
-            agent {
-                docker {
-                    image 'node:20'
+                stage('Build & Test') {
+                    agent {
+                        docker {
+                            image 'node:20'
+                        }
+                    }
+                    steps {
+                        unstash 'node-modules'
+                        echo "🛠 Building project..."
+                        sh 'npm run build-prod'
+                        stash includes: 'dist/**', name: 'angular-devops-dist'
+                    }
                 }
-            }
-            steps {
-                sh 'npm run build-prod'
-                stash includes: 'dist/**', name: 'angular-devops-dist'
             }
         }
 
@@ -98,10 +101,6 @@ pipeline {
             steps {
                 unstash 'angular-devops-dist'
                 script {
-                    sh "pwd"
-                    env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
-
-                    // Dynamically set the image tag: use TAG_NAME if building a tag, otherwise BUILD_ENV-COMMIT_SHA
                     if (env.TAG_NAME) {
                         echo "📦 Building Docker image for tag: ${env.TAG_NAME}"
                         env.FINAL_IMAGE_TAG = "${env.TAG_NAME}"
@@ -109,8 +108,7 @@ pipeline {
                         echo "📦 Building Docker image for branch: ${env.BRANCH_NAME}"
                         env.FINAL_IMAGE_TAG = "${BUILD_ENV}-${COMMIT_SHA}"
                     }
-
-                    sh "docker build -t ${IMAGE_NAME}:${FINAL_IMAGE_TAG} ."
+                    sh "docker build -t ${IMAGE_NAME}:${env.FINAL_IMAGE_TAG} ."
                 }
             }
         }
@@ -119,15 +117,13 @@ pipeline {
         stage('Push to Docker Hub') {
             steps {
                 script {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: "${DOCKER_HUB_CREDENTIALS}",
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS'
-                        )
-                    ]) {
+                    withCredentials([usernamePassword(
+                        credentialsId: "${DOCKER_HUB_CREDENTIALS}",
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                        sh "docker push ${IMAGE_NAME}:${FINAL_IMAGE_TAG}"
+                        sh "docker push ${IMAGE_NAME}:${env.FINAL_IMAGE_TAG}"
                     }
                 }
             }
@@ -141,10 +137,7 @@ pipeline {
                 GIT_USER_NAME = "TyreX6"
             }
             when {
-                anyOf {
-                    branch pattern: ".*", comparator: "REGEXP" // run for any branch
-                    buildingTag()                             // run for tags
-                }
+                branch pattern: ".*", comparator: "REGEXP" // any branch
             }
             steps {
                 script {
@@ -169,12 +162,10 @@ pipeline {
                                     git config user.email "ghandrisemh@gmail.com"
                                     git config user.name "Ghandri Sameh"
 
-                                    # Make sure we're on the branch or tag that triggered this build
                                     git fetch origin
-                                    git checkout "$BRANCH_NAME" || git checkout "$TAG_NAME"
+                                    git checkout "$BRANCH_NAME"
                                     git pull --rebase origin "$BRANCH_NAME" || true
 
-                                    # Determine image tag to use in values.yaml
                                     if [ -n "$TAG_NAME" ]; then
                                         echo "📌 Detected tag build: $TAG_NAME"
                                         NEW_TAG="$TAG_NAME"
@@ -183,21 +174,17 @@ pipeline {
                                         NEW_TAG="${BUILD_ENV}-${COMMIT_SHA}"
                                     fi
 
-                                    # Update Helm values.yaml safely
                                     sed -i "s|tag: .*|tag: ${NEW_TAG}|" helm/app/values.yaml
 
                                     git add helm/app/values.yaml
                                     git commit -m "Update deployment image to version ${NEW_TAG}" || echo "No changes to commit"
-
-                                    # Push commit back to the same branch
                                     git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "HEAD:refs/heads/$BRANCH_NAME"
 
-                                    # ✅ Only create a PROD tag if build is running from master
                                     if [ "$BRANCH_NAME" = "master" ]; then
-                                        PROD_TAG=${NEW_TAG}
-                                        echo "🏷️ Creating new tag: $PROD_TAG"
-                                        git tag "$PROD_TAG"
-                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "$PROD_TAG"
+                                        PROD_TAG="PROD-$(date +%d%m%Y)"
+                                        echo "🏷️ Creating new tag: $NEW_TAG"
+                                        git tag "$NEW_TAG"
+                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "$NEW_TAG"
                                     else
                                         echo "ℹ️ Not on master branch — skipping PROD tag creation."
                                     fi
