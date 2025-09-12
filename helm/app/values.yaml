@@ -9,7 +9,7 @@ image:
   repository: angular-devops
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: PROD-4a50d5e
+  tag: PROD-34636a3
 
 appName: angular-devops-app
 
