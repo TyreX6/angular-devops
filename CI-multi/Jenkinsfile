@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     options {
-        timestamps()               // Adds timestamps to console output
+        timestamps() // Adds timestamps to console output
     }
 
     environment {
@@ -100,14 +100,16 @@ pipeline {
                 script {
                     sh "pwd"
                     env.COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+
                     // Dynamically set the image tag: use TAG_NAME if building a tag, otherwise BUILD_ENV-COMMIT_SHA
                     if (env.TAG_NAME) {
-                      echo "📦 Building Docker image for tag: ${env.TAG_NAME}"
-                      env.FINAL_IMAGE_TAG = "${env.TAG_NAME}"
+                        echo "📦 Building Docker image for tag: ${env.TAG_NAME}"
+                        env.FINAL_IMAGE_TAG = "${env.TAG_NAME}"
                     } else {
-                      echo "📦 Building Docker image for branch: ${env.BRANCH_NAME}"
-                      env.FINAL_IMAGE_TAG = "${BUILD_ENV}-${COMMIT_SHA}"
+                        echo "📦 Building Docker image for branch: ${env.BRANCH_NAME}"
+                        env.FINAL_IMAGE_TAG = "${BUILD_ENV}-${COMMIT_SHA}"
                     }
+
                     sh "docker build -t ${IMAGE_NAME}:${FINAL_IMAGE_TAG} ."
                 }
             }
@@ -139,53 +141,66 @@ pipeline {
                 GIT_USER_NAME = "TyreX6"
             }
             when {
-                expression { return env.BRANCH_NAME && env.BRANCH_NAME != "PR-*" }
+                anyOf {
+                    branch pattern: ".*", comparator: "REGEXP" // run for any branch
+                    buildingTag()                             // run for tags
+                }
             }
             steps {
                 script {
                     catchError(buildResult: 'SUCCESS', stageResult: 'ABORTED') {
-                        def deploy = input(
+                        def proceed = input(
                             message: "Update Deployment file on Repo?",
                             ok: "Update",
-                            parameters: [
-                                booleanParam(defaultValue: false, description: '', name: 'UPDATE')
-                            ]
+                            parameters: [booleanParam(defaultValue: false, description: '', name: 'UPDATE')]
                         )
 
-                        if (deploy) {
+                        if (proceed) {
                             withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
                                 sh '''
                                     set -e
                                     set -x
 
-                                    if [ -z "$COMMIT_SHA" ] || [ -z "$BUILD_ENV" ]; then
-                                        echo "❌ Missing COMMIT_SHA or BUILD_ENV"
+                                    if [ -z "$COMMIT_SHA" ]; then
+                                        echo "❌ Missing COMMIT_SHA"
                                         exit 1
                                     fi
 
                                     git config user.email "ghandrisemh@gmail.com"
                                     git config user.name "Ghandri Sameh"
 
-                                    # Ensure branch is up-to-date
+                                    # Make sure we're on the branch or tag that triggered this build
                                     git fetch origin
-                                    git checkout "$BRANCH_NAME"
-                                    git rebase "origin/$BRANCH_NAME"
+                                    git checkout "$BRANCH_NAME" || git checkout "$TAG_NAME"
+                                    git pull --rebase origin "$BRANCH_NAME" || true
+
+                                    # Determine image tag to use in values.yaml
+                                    if [ -n "$TAG_NAME" ]; then
+                                        echo "📌 Detected tag build: $TAG_NAME"
+                                        NEW_TAG="$TAG_NAME"
+                                    else
+                                        echo "🌿 Detected branch build: $BRANCH_NAME"
+                                        NEW_TAG="${BUILD_ENV}-${COMMIT_SHA}"
+                                    fi
 
                                     # Update Helm values.yaml safely
-                                    sed -i "s|tag: .*|tag: ${BUILD_ENV}-${COMMIT_SHA}|" helm/app/values.yaml
+                                    sed -i "s|tag: .*|tag: ${NEW_TAG}|" helm/app/values.yaml
 
                                     git add helm/app/values.yaml
-                                    git commit -m "Update deployment image to version ${BUILD_ENV}-${COMMIT_SHA}" || echo "No changes to commit"
+                                    git commit -m "Update deployment image to version ${NEW_TAG}" || echo "No changes to commit"
 
-                                    # Retry push to avoid transient failures
-                                    n=0
-                                    until [ $n -ge 3 ]
-                                    do
-                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "HEAD:refs/heads/$BRANCH_NAME" && break
-                                        n=$((n+1))
-                                        echo "⚠️ Push failed, retrying ($n/3)..."
-                                        sleep 3
-                                    done
+                                    # Push commit back to the same branch
+                                    git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "HEAD:refs/heads/$BRANCH_NAME"
+
+                                    # ✅ Only create a PROD tag if build is running from master
+                                    if [ "$BRANCH_NAME" = "master" ]; then
+                                        PROD_TAG=${NEW_TAG}
+                                        echo "🏷️ Creating new tag: $PROD_TAG"
+                                        git tag "$PROD_TAG"
+                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "$PROD_TAG"
+                                    else
+                                        echo "ℹ️ Not on master branch — skipping PROD tag creation."
+                                    fi
                                 '''
                             }
                         } else {
