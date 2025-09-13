@@ -61,9 +61,9 @@ For more information on using the Angular CLI, including detailed command refere
 
 ## JENKINS
 
-![img.png](img.png)
+![img.png](docs/img.png)
 
-![img_1.png](img_1.png)
+![img_1.png](docs/img_1.png)
 
 ```bash
 cat /var/jenkins_home/secrets/initialAdminPassword

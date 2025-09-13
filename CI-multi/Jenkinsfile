@@ -147,50 +147,56 @@ pipeline {
                             parameters: [booleanParam(defaultValue: false, description: '', name: 'UPDATE')]
                         )
 
-                        if (proceed) {
-                            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                                sh '''
-                                    set -e
-                                    set -x
-
-                                    if [ -z "$COMMIT_SHA" ]; then
-                                        echo "❌ Missing COMMIT_SHA"
-                                        exit 1
-                                    fi
-
-                                    git config user.email "ghandrisemh@gmail.com"
-                                    git config user.name "Ghandri Sameh"
-
-                                    git fetch origin
-                                    git checkout "$BRANCH_NAME"
-                                    git pull --rebase origin "$BRANCH_NAME" || true
-
-                                    if [ -n "$TAG_NAME" ]; then
-                                        echo "📌 Detected tag build: $TAG_NAME"
-                                        NEW_TAG="$TAG_NAME"
-                                    else
-                                        echo "🌿 Detected branch build: $BRANCH_NAME"
-                                        NEW_TAG="${BUILD_ENV}-${COMMIT_SHA}"
-                                    fi
-
-                                    sed -i "s|tag: .*|tag: ${NEW_TAG}|" helm/app/values.yaml
-
-                                    git add helm/app/values.yaml
-                                    git commit -m "Update deployment image to version ${NEW_TAG}" || echo "No changes to commit"
-                                    git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "HEAD:refs/heads/$BRANCH_NAME"
-
-                                    if [ "$BRANCH_NAME" = "master" ]; then
-                                        PROD_TAG="PROD-$(date +%d%m%Y)"
-                                        echo "🏷️ Creating new tag: $NEW_TAG"
-                                        git tag "$NEW_TAG"
-                                        git push "https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git" "$NEW_TAG"
-                                    else
-                                        echo "ℹ️ Not on master branch — skipping PROD tag creation."
-                                    fi
-                                '''
-                            }
-                        } else {
+                        if (!proceed) {
                             echo "⏭️ Skipped Update Deployment file"
+                            return
+                        }
+
+                        withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+
+                            // ✅ 1. Validate commit SHA
+                            if (!env.COMMIT_SHA) {
+                                error "❌ Missing COMMIT_SHA"
+                            }
+
+                            echo "🔧 Configuring Git user"
+                            sh 'git config user.email "ghandrisemh@gmail.com"'
+                            sh 'git config user.name "Ghandri Sameh"'
+
+                            echo "📥 Fetching & checking out branch: ${env.BRANCH_NAME}"
+                            sh """
+                                git fetch origin
+                                git checkout ${env.BRANCH_NAME}
+                                git pull --rebase origin ${env.BRANCH_NAME} || true
+                            """
+
+                            // ✅ 2. Determine tag
+                            env.NEW_TAG = env.TAG_NAME ? env.TAG_NAME : "${env.BUILD_ENV}-${env.COMMIT_SHA}"
+                            echo env.TAG_NAME ? "📌 Detected tag build: ${env.NEW_TAG}" : "🌿 Detected branch build: ${env.NEW_TAG}"
+
+                            // ✅ 3. Update values.yaml (Groovy instead of sed)
+                            def valuesFile = "helm/app/values.yaml"
+                            def fileContent = readFile(valuesFile)
+                            def updatedContent = fileContent.replaceAll(/tag:\s*.*/, "tag: ${env.NEW_TAG}")
+                            writeFile file: valuesFile, text: updatedContent
+
+                            echo "📝 Committing changes to ${valuesFile}"
+                            sh """
+                                git add ${valuesFile}
+                                git commit -m "Update deployment image to version ${env.NEW_TAG}" || echo "No changes to commit"
+                                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git HEAD:refs/heads/${env.BRANCH_NAME}
+                            """
+
+                            // ✅ 4. Create tag only for master branch
+                            if (env.BRANCH_NAME == "master") {
+                                echo "🏷️ Creating new tag: ${env.NEW_TAG}"
+                                sh """
+                                    git tag ${env.NEW_TAG}
+                                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME}.git ${env.NEW_TAG}
+                                """
+                            } else {
+                                echo "ℹ️ Not on master branch — skipping PROD tag creation."
+                            }
                         }
                     }
                 }
